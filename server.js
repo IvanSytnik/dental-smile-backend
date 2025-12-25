@@ -10,12 +10,18 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Email transporter configuration
+// Email transporter configuration for Outlook
 const transporter = nodemailer.createTransport({
-  service: 'gmail', // или 'yandex', 'mail.ru', etc.
+  host: 'smtp-mail.outlook.com',
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS // App Password для Gmail
+    pass: process.env.EMAIL_PASS
+  },
+  tls: {
+    ciphers: 'SSLv3',
+    rejectUnauthorized: false
   }
 });
 
