@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
@@ -9,21 +8,6 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Email transporter configuration for Outlook
-const transporter = nodemailer.createTransport({
-  host: 'smtp-mail.outlook.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    ciphers: 'SSLv3',
-    rejectUnauthorized: false
-  }
-});
 
 // Функция отправки в Telegram
 async function sendToTelegram(message) {
@@ -60,9 +44,22 @@ async function sendToTelegram(message) {
   }
 }
 
-// Функция отправки email
+// Функция отправки email через Resend API
 async function sendEmail(formData) {
+  const RESEND_API_KEY = process.env.RESEND_API_KEY;
+  
+  if (!RESEND_API_KEY) {
+    console.log('Resend API key not configured, skipping email...');
+    return false;
+  }
+
   const { name, phone, email, service, message } = formData;
+  const recipients = (process.env.EMAIL_RECIPIENTS || '').split(',').filter(e => e.trim());
+  
+  if (recipients.length === 0) {
+    console.log('No email recipients configured');
+    return false;
+  }
 
   const emailContent = `
     <h2>🦷 Новая заявка с сайта Dental Smile</h2>
@@ -77,18 +74,29 @@ async function sendEmail(formData) {
     <p><small>Отправлено: ${new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}</small></p>
   `;
 
-  // Список получателей (можно указать несколько через запятую)
-  const recipients = process.env.EMAIL_RECIPIENTS || process.env.EMAIL_USER;
-
-  const mailOptions = {
-    from: `"Dental Smile Website" <${process.env.EMAIL_USER}>`,
-    to: recipients,
-    subject: `🦷 Новая заявка: ${name} - ${phone}`,
-    html: emailContent
-  };
-
   try {
-    await transporter.sendMail(mailOptions);
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: process.env.EMAIL_FROM || 'Dental Smile <onboarding@resend.dev>',
+        to: recipients,
+        subject: `🦷 Новая заявка: ${name} - ${phone}`,
+        html: emailContent
+      })
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      console.error('Resend API error:', result);
+      return false;
+    }
+    
+    console.log('Email sent via Resend:', result.id);
     return true;
   } catch (error) {
     console.error('Email send error:', error);
@@ -168,6 +176,6 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📧 Email configured: ${process.env.EMAIL_USER ? 'Yes' : 'No'}`);
+  console.log(`📧 Resend configured: ${process.env.RESEND_API_KEY ? 'Yes' : 'No'}`);
   console.log(`📱 Telegram configured: ${process.env.TELEGRAM_BOT_TOKEN ? 'Yes' : 'No'}`);
 });
